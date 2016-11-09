@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import qualified Graphics.Alhacen as GA (main)
 
 main :: IO ()
-main = someFunc
+main = GA.main
