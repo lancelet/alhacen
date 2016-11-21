@@ -1,52 +1,14 @@
 module Graphics.Alhacen where
 
-import qualified Codec.Picture as CP
-import           Data.List (tails)
-import           Data.Word (Word8, Word16)
-import           Text.Printf (printf)
+import           Graphics.Alhacen.Rect (Rect)
+import qualified Graphics.Alhacen.Rect as R (intersection, null, rect,
+                                             rectHeight, rectWidth, rectX,
+                                             rectY)
 
-data Interval = Interval
-    { intervalStart :: !Int
-    , intervalWidth :: !Int }
-    deriving (Show, Eq)
-
-intervalIntersect :: Interval -> Interval -> Maybe Interval
-intervalIntersect i1@(Interval x1 w1) i2@(Interval x2 w2)
-    | x2 < x1 = intervalIntersect i2 i1
-    | (x1 + w1) < x2 = Nothing
-    | otherwise = Just $ Interval x2 w
-  where
-    x1max = x1 + w1
-    x2max = x2 + w2
-    w = (min x1max x2max) - x2
-
-data Rect = Rect
-    { rectX :: !Int
-    , rectY :: !Int
-    , rectWidth :: !Int
-    , rectHeight :: !Int }
-    deriving (Show, Eq)
-
-rect :: Int -> Int -> Int -> Int -> Rect
-rect x y w h = Rect x' y' w' h'
-  where
-    (x', w') = if w > 0 then (x, w) else (x-w, -w)
-    (y', h') = if h > 0 then (y, h) else (y-h, -h)
-
-rectIntersect :: Rect -> Rect -> Maybe Rect
-rectIntersect (Rect x1 y1 w1 h1) (Rect x2 y2 w2 h2) =
-    let
-        maybeix = intervalIntersect (Interval x1 w1) (Interval x2 w2)
-        maybeiy = intervalIntersect (Interval y1 h1) (Interval y2 h2)
-    in
-        case (maybeix, maybeiy) of
-            (Just ix, Just iy) -> Just $ rect x y w h
-                                    where
-                                      x = intervalStart ix
-                                      y = intervalStart iy
-                                      w = intervalWidth ix
-                                      h = intervalWidth iy
-            _ -> Nothing
+import qualified Codec.Picture         as CP
+import           Data.List             (tails)
+import           Data.Word             (Word16, Word8)
+import           Text.Printf           (printf)
 
 data Color = Color !Float !Float !Float
 
@@ -57,17 +19,17 @@ color2px :: Color -> CP.PixelRGBF
 color2px (Color r g b) = CP.PixelRGBF r g b
 
 data Image = Image
-    { imageWidth :: !Int
-    , imageHeight :: !Int
+    { imageWidth   :: !Int
+    , imageHeight  :: !Int
     , imagePixelAt :: Int -> Int -> Color }
 
 data Window = Window
-    { windowX :: !Int
-    , windowY :: !Int
+    { windowX     :: !Int
+    , windowY     :: !Int
     , windowImage :: !Image }
 
-imageRect :: Image -> Rect
-imageRect image = Rect 0 0 (imageWidth image) (imageHeight image)
+imageRect :: Image -> Rect Int
+imageRect image = R.rect 0 0 (imageWidth image) (imageHeight image)
 
 juicy2image :: CP.Image CP.PixelRGBF -> Image
 juicy2image jimage = Image w h fpx
@@ -81,18 +43,24 @@ image2juicy (Image w h fpx) = CP.generateImage fpxj w h
   where
     fpxj x y = color2px $ fpx x y
 
-cropImage :: Image -> Rect -> Maybe Window
-cropImage base winRect = do
-    (Rect wx wy ww wh) <- rectIntersect winRect (imageRect base)
-    let
-        fpx x y = imagePixelAt base (x + wx) (y + wy)
-        image = Image ww wh fpx
-    return $ Window wx wy image
+cropImage :: Image -> Rect Int -> Maybe Window
+cropImage base winRect = if R.null isectRect
+                         then Nothing
+                         else Just win
+  where
+    isectRect = R.intersection winRect (imageRect base)
+    wx = R.rectX isectRect
+    wy = R.rectY isectRect
+    ww = R.rectWidth isectRect
+    wh = R.rectHeight isectRect
+    fpx x y = imagePixelAt base (x + wx) (y + wy)
+    image = Image ww wh fpx
+    win = Window wx wy image
 
 slideInner :: Image -> Int -> Int -> [Window]
 slideInner image rw rh = [f x y | y <- [0..ymax], x <- [0..xmax]]
   where
-    f x y = fromJust $ cropImage image (Rect x y rw rh)
+    f x y = fromJust $ cropImage image (R.rect x y rw rh)
     w = imageWidth image
     h = imageHeight image
     xmax = w - rw
@@ -145,11 +113,6 @@ fastSatisfied p t n floatPixels = any aboveOrBelow (windows n floatPixels)
     above xs = all (\x -> x > (p + t)) xs
     below xs = all (\x -> x < (p - t)) xs
     windows m = filter (\l -> length l == m) . map (take m) . tails
-    {-
-    windows m xs = takeLengthOf (drop (m-1) xs) (windows' m xs)
-    windows' m = map (take m) . tails
-    takeLengthOf = zipWith (flip const)
-    -}
 
 fastFeatureDetector :: Image             -- ^ image in which to detect features
                     -> (Color -> Float)  -- ^ intensity function
@@ -184,7 +147,7 @@ fromRight (Right x) = x
 fromRight (Left _)  = error "fromRight called on Left!"
 
 testCrop :: Image -> Image
-testCrop img = windowImage $ fromJust $ cropImage img (Rect 50 50 100 100)
+testCrop img = windowImage $ fromJust $ cropImage img (R.rect 50 50 100 100)
 
 word8ToFloat :: Word8 -> Float
 word8ToFloat x = realToFrac x / ub
@@ -235,14 +198,3 @@ main = do
         image = juicy2image $ fromRight $ (eitherImage >>= asRGBF)
         features = fast12Red image 0.4
     putStrLn $ show features
-    
-    --eitherImage <- CP.readImage fileName
-
-    {-
-    let
-        inImage = juicy2image $ fromRight $ (eitherImage >>= asRGBF)
-        sliderImgs = take 1000 $ slideInner inImage 7 7
-        sliders = zip [0..] sliderImgs
-
-    sequence_ $ fmap saveNumberedWindow sliders
-    -}
