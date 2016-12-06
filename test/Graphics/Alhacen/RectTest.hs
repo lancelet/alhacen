@@ -3,7 +3,7 @@ module Graphics.Alhacen.RectTest (tests) where
 import           Graphics.Alhacen.Rect (Rect, contains, containsPt, deflate,
                                         empty, hull, inflate, intersection,
                                         null, rect, rectHeight, rectWidth,
-                                        rectX, rectY)
+                                        rectX, rectY, withDims)
 
 import qualified Control.Exception     as CE (assert)
 import           Data.Ratio            (Rational)
@@ -12,7 +12,7 @@ import           System.Random         (Random)
 
 import           Test.QuickCheck       (Gen, choose)
 import           Test.Tasty            (TestTree, testGroup)
-import           Test.Tasty.HUnit      (Assertion, assertBool, testCase, (@=?))
+import           Test.Tasty.HUnit      (assertBool, testCase, (@=?))
 import           Test.Tasty.QuickCheck (Property, forAll, testProperty)
 
 import           Prelude               hiding (null)
@@ -35,29 +35,30 @@ createTests = testGroup "creation"
               , rectCreateZeroWidth
               , rectCreateZeroHeight
               , rectCreateEmpty
-              , rectCreateQC ]
+              , rectCreateQC
+              , rectWithDims ]
 
-assertSize :: (Show a, Eq a) => a -> a -> a -> a -> Rect a -> Assertion
-assertSize x y w h r = do
-    x @=? rectX r
-    y @=? rectY r
-    w @=? rectWidth r
-    h @=? rectHeight r
+fromJust :: Maybe a -> a
+fromJust (Just x) = x
+fromJust Nothing  = error "fromJust called on Nothing in a test!"
 
 rectCreate :: TestTree
 rectCreate = testCase "typical Rect" $ do
     let r = rect 100 101 20 21 :: Rect Int
-    assertSize 100 101 20 21 r
+    100 @=? (fromJust $ rectX r)
+    101 @=? (fromJust $ rectY r)
+    20  @=? (fromJust $ rectWidth r)
+    21  @=? (fromJust $ rectHeight r)
 
 rectCreateNegWidth :: TestTree
 rectCreateNegWidth = testCase "negative width" $ do
     let r = rect 100 101 (-20) 21 :: Rect Int
-    assertSize 80 101 20 21 r
+    rect 80 101 20 21 @=? r
 
 rectCreateNegHeight :: TestTree
 rectCreateNegHeight = testCase "negative height" $ do
     let r = rect 100 101 20 (-21) :: Rect Int
-    assertSize 100 80 20 21 r
+    rect 100 80 20 21 @=? r
 
 rectCreateZeroWidth :: TestTree
 rectCreateZeroWidth = testCase "zero width" $ do
@@ -86,6 +87,19 @@ rectCreateQC = testProperty "quickcheck" f
         y' = if h > 0 then y else y + h
         w' = abs w
         h' = abs h
+
+rectWithDims :: TestTree
+rectWithDims = testCase "withDims" $ do
+    let
+        r = rect 10 20 30 40 :: Rect Int
+        x = withDims r (\a _ _ _ -> a)
+        y = withDims r (\_ b _ _ -> b)
+        w = withDims r (\_ _ c _ -> c)
+        h = withDims r (\_ _ _ d -> d)
+    x @=? Just 10
+    y @=? Just 20
+    w @=? Just 30
+    h @=? Just 40
 
 -------------------------------------------------------------------------------
 
@@ -143,8 +157,17 @@ nonIntersectingProp =
     f :: Rect Int -> Bool
     f r = (null $ intersection r (rectBelow r)) &&
           (null $ intersection r (rectAbove r))
-    rectAbove r = rect (rectX r + rectWidth r) (rectY r + rectHeight r) 5 6
-    rectBelow r = rect (rectX r - fromInteger 5) (rectY r - fromInteger 6) 5 6
+    rectAbove r =
+        let
+            (x, y, w, h) = fromJust $ withDims r (\a b c d -> (a, b, c, d))
+        in
+            rect (x + w) (y + h) 5 6
+    rectBelow r =
+        let
+            x = fromJust $ rectX r
+            y = fromJust $ rectY r
+        in
+            rect (x - 5) (y - 6) 5 6
 
 -------------------------------------------------------------------------------
 
@@ -257,13 +280,13 @@ simpleInflate :: TestTree
 simpleInflate = testCase "one-off inflate" $ do
     let r = rect 100 101 20 21 :: Rect Int
         r' = inflate 2 r
-    assertSize 98 99 24 25 r'
+    rect 98 99 24 25 @=? r'
 
 simpleDeflate :: TestTree
 simpleDeflate = testCase "one-off deflate" $ do
     let r = rect 100 101 20 21 :: Rect Int
         r' = deflate 3 r
-    assertSize 103 104 14 15 r'
+    rect 103 104 14 15 @=? r'
 
 deflateToEmpty :: TestTree
 deflateToEmpty = testCase "deflating beyond zero produces empty rect" $ do
@@ -278,9 +301,12 @@ deflateToEmpty = testCase "deflating beyond zero produces empty rect" $ do
 subRect :: (Ord a, Num a, Random a) => Rect a -> Gen (Rect a)
 subRect r | null r = pure empty
           | otherwise = do
-                x <- choose (rectX r, rectX r + rectWidth r)
-                y <- choose (rectY r, rectY r + rectHeight r)
-                w <- choose (0, rectWidth r - (x - rectX r))
-                h <- choose (0, rectHeight r - (y - rectY r))
+                let
+                    (rx, ry, rw, rh) = fromJust
+                                       $ withDims r (\x y w h -> (x, y, w, h))
+                x <- choose (rx, rx + rw)
+                y <- choose (ry, ry + rh)
+                w <- choose (0, rw - (x - rx))
+                h <- choose (0, rh - (y - ry))
                 let r' = rect x y w h
                 CE.assert (contains r r') (pure r')

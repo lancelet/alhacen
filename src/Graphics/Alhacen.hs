@@ -49,10 +49,10 @@ cropImage base winRect = if R.null isectRect
                          else Just win
   where
     isectRect = R.intersection winRect (imageRect base)
-    wx = R.rectX isectRect
-    wy = R.rectY isectRect
-    ww = R.rectWidth isectRect
-    wh = R.rectHeight isectRect
+    wx = fromJust $ R.rectX isectRect
+    wy = fromJust $ R.rectY isectRect
+    ww = fromJust $ R.rectWidth isectRect
+    wh = fromJust $ R.rectHeight isectRect
     fpx x y = imagePixelAt base (x + wx) (y + wy)
     image = Image ww wh fpx
     win = Window wx wy image
