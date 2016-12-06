@@ -1,9 +1,9 @@
 module Graphics.Alhacen.RectTest (tests) where
 
-import           Graphics.Alhacen.Rect (Rect, contains, empty, hull,
-                                        intersection, null, rect, rectHeight,
-                                        rectWidth, rectX, rectY, inflate,
-                                        deflate)
+import           Graphics.Alhacen.Rect (Rect, contains, containsPt, deflate,
+                                        empty, hull, inflate, intersection,
+                                        null, rect, rectHeight, rectWidth,
+                                        rectX, rectY)
 
 import qualified Control.Exception     as CE (assert)
 import           Data.Ratio            (Rational)
@@ -208,7 +208,8 @@ containsTests :: TestTree
 containsTests = testGroup "contains"
                 [ simpleContains
                 , hullContainment
-                , intersectContainment ]
+                , intersectContainment
+                , simpleContainsPt ]
 
 simpleContains :: TestTree
 simpleContains = testCase "one-off contains" $ do
@@ -234,6 +235,15 @@ intersectContainment =
     f r1 r2 = if r1 `contains` r2
               then (intersection r1 r2) `contains` r2
               else not $ (intersection r1 r2) `contains` r2
+
+simpleContainsPt :: TestTree
+simpleContainsPt = testCase "one-off containsPt" $ do
+    let r = rect 5 5 2 2 :: Rect Int
+    True  @=? containsPt r 6 6
+    False @=? containsPt r 4 6
+    False @=? containsPt r 8 6
+    False @=? containsPt r 6 4
+    False @=? containsPt r 8 4
 
 -------------------------------------------------------------------------------
 
@@ -261,7 +271,7 @@ deflateToEmpty = testCase "deflating beyond zero produces empty rect" $ do
         r2 = rect 100 101 21 20 :: Rect Int
     True @=? (null $ deflate 20 r1)
     True @=? (null $ deflate 20 r2)
-    
+
 -------------------------------------------------------------------------------
 
 -- | Generator of random sub-rectangles.

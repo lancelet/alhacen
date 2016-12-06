@@ -10,12 +10,13 @@ module Graphics.Alhacen.Rect
     , intersection
     , hull
     , contains
+    , containsPt
     , inflate
     , deflate
     ) where
 
 import           Numeric.Interval (Interval, (...))
-import qualified Numeric.Interval as I (contains, empty, hull, inf,
+import qualified Numeric.Interval as I (contains, elem, empty, hull, inf,
                                         intersection, null, width)
 import           Prelude          hiding (null)
 import           Test.QuickCheck  (Arbitrary, arbitrary, frequency)
@@ -102,6 +103,10 @@ contains outr innr = xContained && yContained
     xContained = I.contains (hInt outr) (hInt innr)
     yContained = I.contains (vInt outr) (vInt innr)
 {-# INLINE contains #-}
+
+containsPt :: (Num a, Ord a) => Rect a -> a -> a -> Bool
+containsPt r x y = I.elem x (hInt r) && I.elem y (vInt r)
+{-# INLINE containsPt #-}
 
 inflate :: (Num a, Ord a) => a -> Rect a -> Rect a
 inflate _ Empty = Empty
